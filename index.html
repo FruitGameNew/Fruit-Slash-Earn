@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Juicy Fruit Slash</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%);
+            overflow: hidden;
+            font-family: 'Comic Sans MS', cursive, sans-serif;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: url('https://i.ibb.co/gMxrZN5R/peakpx-10.jpg') center/cover;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.4);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #score, #timer {
+            position: absolute;
+            font-size: 28px;
+            color: #fff;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px 20px;
+            border-radius: 10px;
+        }
+
+        #score {
+            top: 20px;
+            left: 20px;
+        }
+
+        #timer {
+            top: 20px;
+            right: 20px;
+        }
+
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            font-size: 40px;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #FFD700;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
+            z-index: 100;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        button {
+            font-size: 24px;
+            padding: 10px 20px;
+            background-color: #FF4500;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 10px;
+            font-family: 'Comic Sans MS', cursive, sans-serif;
+        }
+
+        button:hover {
+            background-color: #FF6347;
+            transform: scale(1.05);
+        }
+
+        #history {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #fff;
+            font-size: 20px;
+            max-height: 200px;
+            width: 300px;
+            overflow-y: auto;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            cursor: pointer;
+            display: none;
+            text-align: center;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+        }
+
+        #history.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="score">Score: <span id="scoreValue">0</span></div>
+        <div id="timer">Time: <span id="timeValue">60</span></div>
+        <div id="gameOver" class="hidden">
+            Game Over!<br>
+            Final Score: <span id="finalScore"></span><br>
+            <button onclick="restartGame()">Restart</button><br>
+            <button onclick="saveScore()">Save Score</button>
+        </div>
+        <div id="history" onclick="toggleHistory()">High Scores</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('scoreValue');
+        const timeElement = document.getElementById('timeValue');
+        const gameOverElement = document.getElementById('gameOver');
+        const finalScoreElement = document.getElementById('finalScore');
+        const historyElement = document.getElementById('history');
+        const gameContainer = document.getElementById('game-container');
+
+        // Adjust canvas size dynamically
+        function resizeCanvas() {
+            canvas.width = gameContainer.clientWidth;
+            canvas.height = gameContainer.clientHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Game variables
+        let score = 0;
+        let timeLeft = 60;
+        let gameObjects = []; // fruits and bombs will be stored here
+        let particles = [];
+        let isGameOver = false;
+        let lastSpawnTime = 0;
+        let spawnInterval = 200; // milliseconds between object spawns (fruits or bombs)
+
+        // Game object types (fruits and bomb)
+        const objectTypes = [
+            {
+                type: 'fruit',
+                name: 'Watermelon',
+                color: '#8B4513',
+                juiceColor: '#FF1493',
+                image: 'https://i.ibb.co/5g6fBvnd/1000066501-removebg-preview.png',
+                points: 20
+            },
+            {
+                type: 'fruit',
+                name: 'Apple',
+                color: '#FF0000',
+                juiceColor: '#FF4500',
+                image: 'https://i.ibb.co/TDyKkhhv/20250610-221601.png',
+                points: 10
+            },
+            {
+                type: 'fruit',
+                name: 'Orange',
+                color: '#FFA500',
+                juiceColor: '#FF8C00',
+                image: 'https://i.ibb.co/1Yh9d4fD/1000066502-removebg-preview.png',
+                points: 10
+            },
+            {
+                type: 'fruit',
+                name: 'Pineapple',
+                color: '#FFD700',
+                juiceColor: '#EEE8AA',
+                image: 'https://i.ibb.co/LXVSy1LD/20250610-221528.png',
+                points: 10
+            },
+            {
+                type: 'fruit',
+                name: 'Strawberry',
+                color: '#FF6347',
+                juiceColor: '#DC143C',
+                image: 'https://i.ibb.co/ZRcyFFDn/20250610-221432.png',
+                points: 10
+            },
+            {
+                type: 'bomb',
+                name: 'Bomb',
+                color: '#333333', // Dark color for bomb
+                juiceColor: '#FF0000', // Red for explosion particles
+                image: 'https://i.ibb.co/cKHQjMwK/20250610-221503.png', // A simple bomb image
+                points: -20 // This value is now largely illustrative as we'll use half of current score
+            }
+        ];
+
+        // Preload images
+        const objectImages = {};
+        objectTypes.forEach(obj => {
+            const img = new Image();
+            img.src = obj.image;
+            objectImages[obj.name] = img;
+        });
+
+        // Sound effects
+        // Updated sound effects for slicing and bomb explosion
+        const sliceSound = new Audio('https://www.soundjay.com/buttons/sounds/button-1.mp3'); // A sharper, quicker sound
+        const bombSound = new Audio('https://www.soundjay.com/misc/sounds/bomb-explosion-01.mp3'); // More distinct explosion sound
+
+        // Universal GameObject class (for both fruits and bombs)
+        class GameObject {
+            constructor(objType) {
+                this.type = objType.type;
+                this.name = objType.name;
+                this.color = objType.color;
+                this.juiceColor = objType.juiceColor;
+                this.image = objectImages[this.name];
+                this.points = objType.points;
+                
+                this.x = Math.random() * (canvas.width - 60) + 30;
+                this.y = canvas.height + 50; 
+                this.radius = 30 + Math.random() * 10;
+                // Adjusted speedX and speedY for faster movement
+                this.speedX = (Math.random() - 0.5) * 7; 
+                this.speedY = -(Math.random() * 8 + 10); 
+                this.rotation = Math.random() * Math.PI * 2;
+                this.rotationSpeed = (Math.random() - 0.5) * 0.1;
+                this.isSliced = false;
+            }
+
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.speedY += 0.15; // Gravity
+                this.rotation += this.rotationSpeed;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                
+                // Draw image if loaded and not sliced, otherwise fallback to colored circle
+                if (this.image.complete && this.image.naturalWidth > 0 && !this.isSliced) {
+                    ctx.drawImage(this.image, -this.radius, -this.radius, this.radius * 2, this.radius * 2);
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = this.isSliced ? this.juiceColor : this.color;
+                    ctx.fill();
+                    ctx.closePath();
+                    
+                    if (this.isSliced && this.type === 'fruit') { // Only draw slice for fruits
+                        ctx.beginPath();
+                        ctx.moveTo(-this.radius, 0);
+                        ctx.lineTo(this.radius, 0);
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+                        ctx.lineWidth = 5;
+                        ctx.stroke();
+                    }
+                }
+                
+                ctx.restore();
+            }
+        }
+
+        // Particle class for juice/explosion effects
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.size = Math.random() * 8 + 3;
+                this.speedX = (Math.random() - 0.5) * 12;
+                this.speedY = (Math.random() - 0.5) * 12;
+                this.color = color;
+                this.alpha = 1;
+                this.gravity = 0.2;
+                this.life = 100 + Math.random() * 50;
+            }
+
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.speedY += this.gravity;
+                this.alpha -= 1 / this.life;
+                this.size *= 0.99;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.closePath();
+                ctx.restore();
+            }
+        }
+
+        // Create objects (fruits or bombs) with controlled spawning
+        function spawnObject() {
+            const now = Date.now();
+            // Target: 4-5 objects per second (200-250 ms per object)
+            if (!isGameOver && now - lastSpawnTime > spawnInterval && gameObjects.length < 30) { 
+                // Randomly decide between fruit or bomb
+                // Reduced bomb spawn chance from 60% to 15%
+                const randomIndex = Math.random() < 0.15 ? objectTypes.length - 1 : Math.floor(Math.random() * (objectTypes.length - 1));
+                const newObject = new GameObject(objectTypes[randomIndex]);
+                gameObjects.push(newObject);
+                lastSpawnTime = now;
+                // Randomize next spawn time slightly for 4-5 objects/sec
+                spawnInterval = 200 + Math.random() * 50; 
+            }
+        }
+
+        // Handle touch/click for slicing/hitting
+        function handleInput(e) {
+            if (isGameOver) return;
+            e.preventDefault();
+
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+
+            const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
+            const touchX = (clientX - rect.left) * scaleX;
+            const touchY = (clientY - rect.top) * scaleY;
+
+            let interactionOccurred = false;
+            
+            gameObjects = gameObjects.filter(obj => {
+                const dx = obj.x - touchX;
+                const dy = obj.y - touchY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < obj.radius && !obj.isSliced) {
+                    obj.isSliced = true; // Mark as "hit"
+                    interactionOccurred = true;
+
+                    if (obj.type === 'fruit') {
+                        score += obj.points;
+                        createParticles(obj.x, obj.y, obj.juiceColor);
+                        sliceSound.currentTime = 0; // Rewind to start
+                        sliceSound.play(); // Play slice sound
+                    } else if (obj.type === 'bomb') {
+                        // Deduct half of the current score
+                        score = Math.floor(score / 2); // Use Math.floor to ensure integer score
+                        createParticles(obj.x, obj.y, obj.juiceColor, true); // Explosion particles
+                        bombSound.currentTime = 0; // Rewind to start
+                        bombSound.play(); // Play bomb sound
+                    }
+                    scoreElement.textContent = score;
+                    // Return false to remove the object immediately after interaction
+                    return false;
+                }
+                return true;
+            });
+        }
+
+        // Create particles for juice or explosion
+        function createParticles(x, y, color, isBomb = false) {
+            let numParticles = isBomb ? 50 : 25; // More particles for bomb explosion
+            for (let i = 0; i < numParticles; i++) {
+                particles.push(new Particle(x, y, color));
+            }
+        }
+
+        // Timer
+        function startTimer() {
+            const timer = setInterval(() => {
+                if (isGameOver) {
+                    clearInterval(timer);
+                    return;
+                }
+                timeLeft--;
+                timeElement.textContent = timeLeft;
+                if (timeLeft <= 0) {
+                    endGame();
+                }
+            }, 1000);
+        }
+
+        function endGame() {
+            isGameOver = true;
+            finalScoreElement.textContent = score;
+            gameOverElement.classList.remove('hidden');
+        }
+
+        // Save score to history
+        function saveScore() {
+            let playerName = prompt("Enter your name:", "Player");
+            if (playerName) {
+                let history = JSON.parse(localStorage.getItem('fruitSlashHistory') || '[]');
+                history.push({ 
+                    name: playerName, 
+                    score: score,
+                    date: new Date().toLocaleDateString('en-GB') // Format date as DD/MM/YYYY
+                });
+                // Sort by score (descending)
+                history.sort((a, b) => b.score - a.score);
+                // Keep only top 10 scores
+                history = history.slice(0, 10);
+                localStorage.setItem('fruitSlashHistory', JSON.stringify(history));
+                updateHistory();
+            }
+        }
+
+        // Toggle history display
+        function toggleHistory() {
+            historyElement.classList.toggle('show');
+            if (historyElement.classList.contains('show')) {
+                updateHistory();
+            }
+        }
+
+        // Update history display
+        function updateHistory() {
+            let history = JSON.parse(localStorage.getItem('fruitSlashHistory') || '[]');
+            historyElement.innerHTML = '<h3>High Scores</h3>' + 
+                history.map((entry, index) => 
+                    `${index + 1}. ${entry.name}: ${entry.score} (${entry.date || ''})`
+                ).join('<br>') +
+                (history.length === 0 ? '<p>No scores yet!</p>' : '');
+        }
+
+        // Restart game
+        function restartGame() {
+            score = 0;
+            timeLeft = 60;
+            gameObjects = []; // Reset all game objects
+            particles = [];
+            isGameOver = false;
+            scoreElement.textContent = score;
+            timeElement.textContent = timeLeft;
+            gameOverElement.classList.add('hidden');
+            startTimer();
+            gameLoop();
+        }
+
+        // Main game loop
+        function gameLoop() {
+            if (isGameOver) return;
+
+            // Clear canvas with semi-transparent background for motion blur effect
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Update and draw game objects (fruits and bombs)
+            gameObjects.forEach(obj => {
+                obj.update();
+                obj.draw();
+            });
+
+            // Update and draw juice/explosion particles
+            particles.forEach(particle => {
+                particle.update();
+                particle.draw();
+            });
+
+            // Remove off-screen objects and expired particles
+            gameObjects = gameObjects.filter(obj => {
+                return obj.y < canvas.height + obj.radius * 2 && 
+                       obj.y > -canvas.height * 0.2 && 
+                       obj.x > -obj.radius * 2 && 
+                       obj.x < canvas.width + obj.radius * 2;
+            });
+            
+            particles = particles.filter(particle => particle.alpha > 0);
+
+            // Spawn new objects
+            spawnObject();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Event listeners
+        canvas.addEventListener('click', handleInput);
+        canvas.addEventListener('touchstart', handleInput);
+        canvas.addEventListener('touchmove', handleInput);
+
+        // Start game
+        startTimer();
+        gameLoop();
+    </script>
+</body>
+</html>
